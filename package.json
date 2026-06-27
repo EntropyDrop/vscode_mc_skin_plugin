@@ -5,12 +5,14 @@
   "version": "0.1.0",
   "publisher": "entropydrop",
   "engines": {
-    "vscode": "^1.60.0"
+    "vscode": "^1.68.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "*"
+  ],
   "main": "./extension.js",
   "contributes": {
     "commands": [
