@@ -146,8 +146,8 @@ async function onTabChanged(filePath) {
     const config = vscode.workspace.getConfiguration('mcSkinPreview');
     const pythonPath = config.get('pythonPath') || '';
     
-    const isValid = await validateSkin(filePath, pythonPath);
-    if (!isValid) {
+    const result = await validateSkin(filePath, pythonPath);
+    if (!result.valid) {
         outputChannel.appendLine(`Image ${path.basename(filePath)} (${dims.width}x${dims.height}) is not a valid Minecraft skin (has transparent holes in base layer). Skipping auto-preview.`);
         return;
     }
@@ -160,8 +160,8 @@ async function onTabChanged(filePath) {
     }
 
     // 3. Show / update preview
-    outputChannel.appendLine(`Automatically opening 3D preview for valid skin: ${filePath}`);
-    showPreview(filePath);
+    outputChannel.appendLine(`Automatically opening 3D preview for valid skin: ${filePath} (Model: ${result.model})`);
+    showPreview(filePath, result.model);
 }
 
 /**
@@ -195,20 +195,24 @@ function getPngDimensions(filePath) {
 }
 
 /**
- * Spawns python to validate base layer opacity
+ * Spawns python to validate base layer opacity and check model type (Steve vs Alex)
  */
 function validateSkin(filePath, pythonPath) {
     return new Promise((resolve) => {
         const py = pythonPath || 'python3';
         const pythonCode = `
 import sys
+import json
 from PIL import Image
 try:
-    from mc_skin_utils.validator import validate_base_layer
+    from mc_skin_utils.validator import validate_base_layer, is_alex
     img = Image.open(sys.argv[1])
     valid = validate_base_layer(img)
-    sys.exit(0 if valid else 1)
+    alex = is_alex(img)
+    print(json.dumps({"valid": valid, "model": "slim" if alex else "default"}))
+    sys.exit(0)
 except Exception as e:
+    print(json.dumps({"valid": False, "model": "default", "error": str(e)}))
     sys.exit(2)
 `;
         
@@ -227,12 +231,22 @@ except Exception as e:
 
         const proc = cp.spawn(py, ['-c', pythonCode, filePath], { env: processEnv });
         
+        let stdoutData = '';
+        proc.stdout.on('data', (data) => {
+            stdoutData += data.toString();
+        });
+
         proc.on('close', (code) => {
-            resolve(code === 0);
+            try {
+                const res = JSON.parse(stdoutData.trim());
+                resolve(res);
+            } catch (err) {
+                resolve({ valid: false, model: 'default' });
+            }
         });
 
         proc.on('error', () => {
-            resolve(false);
+            resolve({ valid: false, model: 'default' });
         });
     });
 }
@@ -266,7 +280,7 @@ function closePngEditor(filePath) {
 /**
  * Creates or updates the Webview panel showing the 3D skin model using Base64 Data URL
  */
-function showPreview(filePath) {
+function showPreview(filePath, model) {
     currentPreviewedFile = filePath;
 
     // Load file and convert to Base64 Data URL to bypass image caching and localResourceRoots issues
@@ -280,11 +294,12 @@ function showPreview(filePath) {
     }
 
     if (activePreviewPanel) {
-        // If webview is already open, update the skin image source directly with Base64 data
+        // If webview is already open, update the skin image source directly with Base64 data and model type
         activePreviewPanel.title = `3D Skin: ${path.basename(filePath)}`;
         activePreviewPanel.webview.postMessage({
             command: 'updateSkin',
-            url: base64Data
+            url: base64Data,
+            model: model
         });
     } else {
         // Create a new webview panel beside the active editor
@@ -316,7 +331,7 @@ function showPreview(filePath) {
         const bundleUri = activePreviewPanel.webview.asWebviewUri(
             vscode.Uri.file(path.join(extensionContext.extensionPath, 'skinview3d.bundle.js'))
         );
-        activePreviewPanel.webview.html = getWebviewContent(base64Data, bundleUri);
+        activePreviewPanel.webview.html = getWebviewContent(base64Data, bundleUri, model);
     }
 
     // Set up file watcher to automatically reload on save
@@ -325,11 +340,20 @@ function showPreview(filePath) {
             try {
                 const fileBuffer = fs.readFileSync(filePath);
                 const updatedBase64 = `data:image/png;base64,${fileBuffer.toString('base64')}`;
-                activePreviewPanel.webview.postMessage({
-                    command: 'updateSkin',
-                    url: updatedBase64
+                
+                // Fetch the updated model type dynamically if the file is modified
+                const config = vscode.workspace.getConfiguration('mcSkinPreview');
+                const pythonPath = config.get('pythonPath') || '';
+                validateSkin(filePath, pythonPath).then(result => {
+                    if (activePreviewPanel && currentPreviewedFile === filePath) {
+                        activePreviewPanel.webview.postMessage({
+                            command: 'updateSkin',
+                            url: updatedBase64,
+                            model: result.model
+                        });
+                        outputChannel.appendLine(`Hot-reloaded skin on file modification: ${filePath} (Model: ${result.model})`);
+                    }
                 });
-                outputChannel.appendLine(`Hot-reloaded skin on file modification: ${filePath}`);
             } catch (err) {
                 outputChannel.appendLine(`Failed to read modified skin: ${err.message}`);
             }
@@ -361,7 +385,7 @@ function watchFile(filePath, callback) {
 /**
  * Generates the HTML content for the Webview utilizing skinview3d
  */
-function getWebviewContent(skinUri, bundleUri) {
+function getWebviewContent(skinUri, bundleUri, model) {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -571,14 +595,15 @@ function getWebviewContent(skinUri, bundleUri) {
             logBox.scrollTop = logBox.scrollHeight;
         }
         
-        function initViewer(skinUrl) {
-            log("initViewer started");
+        function initViewer(skinUrl, modelType) {
+            log("initViewer started with model: " + modelType);
             try {
                 viewer = new skinview3d.SkinViewer({
                     canvas: document.createElement("canvas"),
                     width: window.innerWidth,
                     height: window.innerHeight,
-                    skin: skinUrl
+                    skin: skinUrl,
+                    model: modelType
                 });
                 container.appendChild(viewer.canvas);
                 
@@ -609,7 +634,7 @@ function getWebviewContent(skinUri, bundleUri) {
             }
         }
 
-        initViewer("${skinUri}");
+        initViewer("${skinUri}", "${model}");
 
         // Animations switcher
         function setAnimation(name) {
@@ -682,15 +707,15 @@ function getWebviewContent(skinUri, bundleUri) {
             log("Message received!");
             try {
                 const message = event.data;
-                log("Command: " + message.command);
+                log("Command: " + message.command + " | Model: " + message.model);
                 if (message.command === 'updateSkin') {
                     if (viewer) {
                         log("Loading new skin texture...");
-                        viewer.loadSkin(message.url);
+                        viewer.loadSkin(message.url, { model: message.model });
                         log("loadSkin called");
                     } else {
                         log("Viewer not ready. Initializing...");
-                        initViewer(message.url);
+                        initViewer(message.url, message.model);
                     }
                 }
             } catch (err) {
