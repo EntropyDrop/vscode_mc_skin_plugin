@@ -81,6 +81,7 @@ function triggerAutoPreviewCheck() {
     }
     autoCheckTimer = setTimeout(() => {
         const filePath = getActiveTabFilePath();
+        outputChannel.appendLine(`Tab check triggered. Active file path: ${filePath}`);
         if (filePath) {
             onTabChanged(filePath);
         }
@@ -91,14 +92,7 @@ function triggerAutoPreviewCheck() {
  * Retrieves the filesystem path of the currently active tab
  */
 function getActiveTabFilePath() {
-    // Try to get from active text editor first (handles text documents)
-    if (vscode.window.activeTextEditor && vscode.window.activeTextEditor.document) {
-        const uri = vscode.window.activeTextEditor.document.uri;
-        if (uri && uri.scheme === 'file') {
-            return uri.fsPath;
-        }
-    }
-    // Fallback to active tab group (handles image/binary editors)
+    // Try the tabGroups API first, as it is the most reliable way to find the actually focused tab
     if (vscode.window.tabGroups && vscode.window.tabGroups.activeTabGroup) {
         const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
         if (activeTab && activeTab.input) {
@@ -115,6 +109,13 @@ function getActiveTabFilePath() {
                     return input[key].fsPath;
                 }
             }
+        }
+    }
+    // Fallback to active text editor if tabGroups is not supported
+    if (vscode.window.activeTextEditor && vscode.window.activeTextEditor.document) {
+        const uri = vscode.window.activeTextEditor.document.uri;
+        if (uri && uri.scheme === 'file') {
+            return uri.fsPath;
         }
     }
     return null;
