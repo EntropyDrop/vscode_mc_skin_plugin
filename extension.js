@@ -2,7 +2,9 @@ const vscode = require('vscode');
 const cp = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
+let extensionContext = null;
 let activePreviewPanel = null;
 let currentPreviewedFile = null;
 let fileWatcher = null;
@@ -14,6 +16,7 @@ let outputChannel = null;
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
+    extensionContext = context;
     outputChannel = vscode.window.createOutputChannel("Minecraft Skin Previewer");
     outputChannel.appendLine("Minecraft Skin Previewer extension is now active.");
     context.subscriptions.push(outputChannel);
@@ -98,8 +101,20 @@ function getActiveTabFilePath() {
     // Fallback to active tab group (handles image/binary editors)
     if (vscode.window.tabGroups && vscode.window.tabGroups.activeTabGroup) {
         const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
-        if (activeTab && activeTab.input && activeTab.input.uri) {
-            return activeTab.input.uri.fsPath;
+        if (activeTab && activeTab.input) {
+            const input = activeTab.input;
+            if (input.uri && input.uri.scheme === 'file') {
+                return input.uri.fsPath;
+            }
+            if (input.resource && input.resource.scheme === 'file') {
+                return input.resource.fsPath;
+            }
+            // Inspect other properties
+            for (const key in input) {
+                if (input[key] && input[key].scheme === 'file' && typeof input[key].fsPath === 'string') {
+                    return input[key].fsPath;
+                }
+            }
         }
     }
     return null;
@@ -242,6 +257,8 @@ function showPreview(filePath) {
             {
                 enableScripts: true,
                 localResourceRoots: [
+                    vscode.Uri.file(extensionContext.extensionPath),
+                    vscode.Uri.file(os.homedir()),
                     vscode.Uri.file(path.dirname(filePath))
                 ]
             }
@@ -257,7 +274,10 @@ function showPreview(filePath) {
 
         const webviewSkinUri = activePreviewPanel.webview.asWebviewUri(fileUri);
         const cacheBusterUrl = `${webviewSkinUri.toString()}?t=${Date.now()}`;
-        activePreviewPanel.webview.html = getWebviewContent(cacheBusterUrl);
+        const bundleUri = activePreviewPanel.webview.asWebviewUri(
+            vscode.Uri.file(path.join(extensionContext.extensionPath, 'skinview3d.bundle.js'))
+        );
+        activePreviewPanel.webview.html = getWebviewContent(cacheBusterUrl, bundleUri);
     }
 
     // Set up file watcher to automatically reload on save
@@ -298,7 +318,7 @@ function watchFile(filePath, callback) {
 /**
  * Generates the HTML content for the Webview utilizing skinview3d
  */
-function getWebviewContent(skinUri) {
+function getWebviewContent(skinUri, bundleUri) {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -477,9 +497,8 @@ function getWebviewContent(skinUri) {
         </div>
     </div>
 
-    <script type="module">
-        import skinview3d from 'https://cdn.jsdelivr.net/npm/skinview3d@3.4.2/+esm';
-        
+    <script src="${bundleUri}"></script>
+    <script>
         let viewer;
         let rotateAnim;
         const container = document.getElementById("canvas-container");
