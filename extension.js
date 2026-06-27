@@ -446,7 +446,42 @@ function getWebviewContent(skinUri, bundleUri, model) {
             padding: 16px;
             width: 220px;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 1;
+            transform: scale(1);
+            transform-origin: top right;
+            pointer-events: auto;
+        }
+        
+        #control-panel.collapsed {
+            opacity: 0;
+            transform: scale(0.8);
+            pointer-events: none;
+        }
+
+        #panel-toggle {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            z-index: 20;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            color: var(--fg-color);
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        #panel-toggle:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(1.05);
         }
 
         h3 {
@@ -511,7 +546,7 @@ function getWebviewContent(skinUri, bundleUri, model) {
         #info {
             position: absolute;
             bottom: 16px;
-            left: 16px;
+            right: 16px;
             z-index: 10;
             font-size: 11px;
             opacity: 0.5;
@@ -532,20 +567,56 @@ function getWebviewContent(skinUri, bundleUri, model) {
             max-height: 120px;
             width: 300px;
             overflow-y: auto;
-            pointer-events: none;
+            pointer-events: auto;
             padding: 8px;
             border-radius: 6px;
             font-family: monospace;
             border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        #debug-log.collapsed {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+        }
+
+        #log-toggle {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            z-index: 110;
+            background: rgba(30, 30, 30, 0.7);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 10px;
+            color: var(--fg-color);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+        #log-toggle:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
     </style>
 </head>
 <body>
     <div id="canvas-container"></div>
     <div id="info">Drag to rotate • Scroll to zoom</div>
-    <div id="debug-log">Log Console:</div>
+    
+    <!-- Collapsible Debug Log Overlay -->
+    <div id="debug-log" class="collapsed">Log Console:</div>
+    <button id="log-toggle" title="Toggle Log Console">Logs 📋</button>
 
-    <div id="control-panel">
+    <!-- Collapsible Control Panel Toggle Button -->
+    <button id="panel-toggle" title="Toggle Controls">⚙️</button>
+
+    <!-- Collapsible Control Panel -->
+    <div id="control-panel" class="collapsed">
         <h3>Skin Viewer</h3>
         
         <div class="control-row">
@@ -700,6 +771,22 @@ function getWebviewContent(skinUri, bundleUri, model) {
                 viewer.width = window.innerWidth;
                 viewer.height = window.innerHeight;
             }
+        });
+
+        // Toggle Control Panel
+        const panelToggle = document.getElementById("panel-toggle");
+        const controlPanel = document.getElementById("control-panel");
+        panelToggle.addEventListener("click", () => {
+            const isCollapsed = controlPanel.classList.toggle("collapsed");
+            panelToggle.innerHTML = isCollapsed ? "⚙️" : "✕";
+        });
+
+        // Toggle Log Console
+        const logToggle = document.getElementById("log-toggle");
+        const debugLog = document.getElementById("debug-log");
+        logToggle.addEventListener("click", () => {
+            const isCollapsed = debugLog.classList.toggle("collapsed");
+            logToggle.style.background = isCollapsed ? "rgba(30, 30, 30, 0.7)" : "rgba(80, 80, 80, 0.7)";
         });
 
         // Listen for updates from extension
