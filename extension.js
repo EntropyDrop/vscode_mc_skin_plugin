@@ -44,14 +44,18 @@ function activate(context) {
     context.subscriptions.push(commandDisposable);
 
     // Set up auto-detection listener on tab activation / change
-    if (vscode.window.tabGroups) {
-        let activeTabGroupListener = vscode.window.tabGroups.onDidChangeActiveTabGroup(() => {
-            triggerAutoPreviewCheck();
-        });
-        let tabsListener = vscode.window.tabGroups.onDidChangeTabs(() => {
-            triggerAutoPreviewCheck();
-        });
-        context.subscriptions.push(activeTabGroupListener, tabsListener);
+    try {
+        if (vscode.window.tabGroups) {
+            let activeTabGroupListener = vscode.window.tabGroups.onDidChangeTabGroups(() => {
+                triggerAutoPreviewCheck();
+            });
+            let tabsListener = vscode.window.tabGroups.onDidChangeTabs(() => {
+                triggerAutoPreviewCheck();
+            });
+            context.subscriptions.push(activeTabGroupListener, tabsListener);
+        }
+    } catch (err) {
+        outputChannel.appendLine(`TabGroups API not fully supported: ${err.message}. Fallback to active text editor listener.`);
     }
 
     // Fallback/additional check on text editor change
