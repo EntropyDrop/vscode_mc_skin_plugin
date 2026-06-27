@@ -732,18 +732,30 @@ function getWebviewContent(skinUri, bundleUri, model) {
 
         // Layer visibility toggles
         function updateLayerVisibility() {
-            if (!viewer || !viewer.playerObject || !viewer.playerObject.skinLayers) {
-                log("Warning: playerObject skinLayers not ready");
+            if (!viewer || !viewer.playerObject || !viewer.playerObject.skin) {
+                log("Warning: playerObject skin not ready");
                 return;
             }
             try {
-                const layers = viewer.playerObject.skinLayers;
-                if (layers.head) layers.head.outer.visible = document.getElementById("layer-hat").checked;
-                if (layers.body) layers.body.outer.visible = document.getElementById("layer-jacket").checked;
-                if (layers.leftArm) layers.leftArm.outer.visible = document.getElementById("layer-left-sleeve").checked;
-                if (layers.rightArm) layers.rightArm.outer.visible = document.getElementById("layer-right-sleeve").checked;
-                if (layers.leftLeg) layers.leftLeg.outer.visible = document.getElementById("layer-left-pants").checked;
-                if (layers.rightLeg) layers.rightLeg.outer.visible = document.getElementById("layer-right-pants").checked;
+                const skin = viewer.playerObject.skin;
+                if (skin.head && skin.head.outerLayer) {
+                    skin.head.outerLayer.visible = document.getElementById("layer-hat").checked;
+                }
+                if (skin.body && skin.body.outerLayer) {
+                    skin.body.outerLayer.visible = document.getElementById("layer-jacket").checked;
+                }
+                if (skin.leftArm && skin.leftArm.outerLayer) {
+                    skin.leftArm.outerLayer.visible = document.getElementById("layer-left-sleeve").checked;
+                }
+                if (skin.rightArm && skin.rightArm.outerLayer) {
+                    skin.rightArm.outerLayer.visible = document.getElementById("layer-right-sleeve").checked;
+                }
+                if (skin.leftLeg && skin.leftLeg.outerLayer) {
+                    skin.leftLeg.outerLayer.visible = document.getElementById("layer-left-pants").checked;
+                }
+                if (skin.rightLeg && skin.rightLeg.outerLayer) {
+                    skin.rightLeg.outerLayer.visible = document.getElementById("layer-right-pants").checked;
+                }
                 log("Layers updated successfully");
             } catch (err) {
                 log("Layer update error: " + err.message);
