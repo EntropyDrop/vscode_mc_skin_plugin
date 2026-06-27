@@ -4,6 +4,11 @@
   "description": "Preview Minecraft PNG skins in interactive 3D using mc_skin_utils",
   "version": "0.1.0",
   "publisher": "entropydrop",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EntropyDrop/vscode_mc_skin_plugin.git"
+  },
   "engines": {
     "vscode": "^1.68.0"
   },
