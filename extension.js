@@ -657,7 +657,6 @@ function getWebviewContent(skinUri, bundleUri, model) {
     <script src="${bundleUri}"></script>
     <script>
         let viewer;
-        let rotateAnim;
         const container = document.getElementById("canvas-container");
         const logBox = document.getElementById("debug-log");
 
@@ -684,16 +683,16 @@ function getWebviewContent(skinUri, bundleUri, model) {
                 
                 // Add animations
                 setAnimation("walk");
-                rotateAnim = viewer.animations.add(skinview3d.RotatingAnimation);
-                rotateAnim.speed = 0.5;
+                viewer.autoRotate = true;
+                viewer.autoRotateSpeed = 1.0;
 
                 // Pause auto-rotation on mouse interact
                 container.addEventListener('mousedown', () => {
-                    if (rotateAnim) rotateAnim.paused = true;
+                    if (viewer) viewer.autoRotate = false;
                     document.getElementById("auto-rotate").checked = false;
                 });
                 container.addEventListener('touchstart', () => {
-                    if (rotateAnim) rotateAnim.paused = true;
+                    if (viewer) viewer.autoRotate = false;
                     document.getElementById("auto-rotate").checked = false;
                 });
 
@@ -733,14 +732,22 @@ function getWebviewContent(skinUri, bundleUri, model) {
 
         // Layer visibility toggles
         function updateLayerVisibility() {
-            if (!viewer) return;
-            const skin = viewer.playerObject.skin;
-            skin.headLayer.visible = document.getElementById("layer-hat").checked;
-            skin.bodyLayer.visible = document.getElementById("layer-jacket").checked;
-            skin.leftArmLayer.visible = document.getElementById("layer-left-sleeve").checked;
-            skin.rightArmLayer.visible = document.getElementById("layer-right-sleeve").checked;
-            skin.leftLegLayer.visible = document.getElementById("layer-left-pants").checked;
-            skin.rightLegLayer.visible = document.getElementById("layer-right-pants").checked;
+            if (!viewer || !viewer.playerObject || !viewer.playerObject.skinLayers) {
+                log("Warning: playerObject skinLayers not ready");
+                return;
+            }
+            try {
+                const layers = viewer.playerObject.skinLayers;
+                if (layers.head) layers.head.outer.visible = document.getElementById("layer-hat").checked;
+                if (layers.body) layers.body.outer.visible = document.getElementById("layer-jacket").checked;
+                if (layers.leftArm) layers.leftArm.outer.visible = document.getElementById("layer-left-sleeve").checked;
+                if (layers.rightArm) layers.rightArm.outer.visible = document.getElementById("layer-right-sleeve").checked;
+                if (layers.leftLeg) layers.leftLeg.outer.visible = document.getElementById("layer-left-pants").checked;
+                if (layers.rightLeg) layers.rightLeg.outer.visible = document.getElementById("layer-right-pants").checked;
+                log("Layers updated successfully");
+            } catch (err) {
+                log("Layer update error: " + err.message);
+            }
         }
 
         // Wire UI events
@@ -755,8 +762,8 @@ function getWebviewContent(skinUri, bundleUri, model) {
         });
 
         document.getElementById("auto-rotate").addEventListener("change", (e) => {
-            if (rotateAnim) {
-                rotateAnim.paused = !e.target.checked;
+            if (viewer) {
+                viewer.autoRotate = e.target.checked;
             }
         });
 
