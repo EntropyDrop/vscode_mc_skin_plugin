@@ -152,6 +152,13 @@ async function onTabChanged(filePath) {
         return;
     }
 
+    // Double-check race condition: is the user still viewing this file?
+    const currentActive = getActiveTabFilePath();
+    if (currentActive !== filePath) {
+        outputChannel.appendLine(`Active tab changed from ${filePath} to ${currentActive} during validation. Cancelling preview render.`);
+        return;
+    }
+
     // 3. Show / update preview
     outputChannel.appendLine(`Automatically opening 3D preview for valid skin: ${filePath}`);
     showPreview(filePath);
@@ -231,20 +238,53 @@ except Exception as e:
 }
 
 /**
- * Creates or updates the Webview panel showing the 3D skin model
+ * Closes the tab of the given PNG file path
+ */
+function closePngEditor(filePath) {
+    if (!vscode.window.tabGroups) return;
+    try {
+        for (const group of vscode.window.tabGroups.all) {
+            for (const tab of group.tabs) {
+                let tabPath = null;
+                if (tab.input && tab.input.uri) {
+                    tabPath = tab.input.uri.fsPath;
+                } else if (tab.input && tab.input.resource) {
+                    tabPath = tab.input.resource.fsPath;
+                }
+                if (tabPath === filePath) {
+                    vscode.window.tabGroups.close(tab);
+                    outputChannel.appendLine(`Closed PNG editor tab for: ${filePath}`);
+                    return;
+                }
+            }
+        }
+    } catch (err) {
+        outputChannel.appendLine(`Failed to close PNG editor tab: ${err.message}`);
+    }
+}
+
+/**
+ * Creates or updates the Webview panel showing the 3D skin model using Base64 Data URL
  */
 function showPreview(filePath) {
     currentPreviewedFile = filePath;
-    const fileUri = vscode.Uri.file(filePath);
+
+    // Load file and convert to Base64 Data URL to bypass image caching and localResourceRoots issues
+    let base64Data;
+    try {
+        const fileBuffer = fs.readFileSync(filePath);
+        base64Data = `data:image/png;base64,${fileBuffer.toString('base64')}`;
+    } catch (err) {
+        outputChannel.appendLine(`Failed to convert skin file to Base64: ${err.message}`);
+        return;
+    }
 
     if (activePreviewPanel) {
-        // If webview is already open, update the skin image source
-        const webviewSkinUri = activePreviewPanel.webview.asWebviewUri(fileUri);
-        const cacheBusterUrl = `${webviewSkinUri.toString()}?t=${Date.now()}`;
+        // If webview is already open, update the skin image source directly with Base64 data
         activePreviewPanel.title = `3D Skin: ${path.basename(filePath)}`;
         activePreviewPanel.webview.postMessage({
             command: 'updateSkin',
-            url: cacheBusterUrl
+            url: base64Data
         });
     } else {
         // Create a new webview panel beside the active editor
@@ -258,9 +298,7 @@ function showPreview(filePath) {
             {
                 enableScripts: true,
                 localResourceRoots: [
-                    vscode.Uri.file(extensionContext.extensionPath),
-                    vscode.Uri.file(os.homedir()),
-                    vscode.Uri.file(path.dirname(filePath))
+                    vscode.Uri.file(extensionContext.extensionPath)
                 ]
             }
         );
@@ -271,26 +309,30 @@ function showPreview(filePath) {
                 fileWatcher.close();
                 fileWatcher = null;
             }
+            // Close the corresponding PNG editor when preview panel is closed
+            closePngEditor(filePath);
         });
 
-        const webviewSkinUri = activePreviewPanel.webview.asWebviewUri(fileUri);
-        const cacheBusterUrl = `${webviewSkinUri.toString()}?t=${Date.now()}`;
         const bundleUri = activePreviewPanel.webview.asWebviewUri(
             vscode.Uri.file(path.join(extensionContext.extensionPath, 'skinview3d.bundle.js'))
         );
-        activePreviewPanel.webview.html = getWebviewContent(cacheBusterUrl, bundleUri);
+        activePreviewPanel.webview.html = getWebviewContent(base64Data, bundleUri);
     }
 
     // Set up file watcher to automatically reload on save
     watchFile(filePath, () => {
         if (activePreviewPanel && currentPreviewedFile === filePath) {
-            const webviewSkinUri = activePreviewPanel.webview.asWebviewUri(vscode.Uri.file(filePath));
-            const cacheBusterUrl = `${webviewSkinUri.toString()}?t=${Date.now()}`;
-            activePreviewPanel.webview.postMessage({
-                command: 'updateSkin',
-                url: cacheBusterUrl
-            });
-            outputChannel.appendLine(`Hot-reloaded skin on file modification: ${filePath}`);
+            try {
+                const fileBuffer = fs.readFileSync(filePath);
+                const updatedBase64 = `data:image/png;base64,${fileBuffer.toString('base64')}`;
+                activePreviewPanel.webview.postMessage({
+                    command: 'updateSkin',
+                    url: updatedBase64
+                });
+                outputChannel.appendLine(`Hot-reloaded skin on file modification: ${filePath}`);
+            } catch (err) {
+                outputChannel.appendLine(`Failed to read modified skin: ${err.message}`);
+            }
         }
     });
 }
