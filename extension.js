@@ -496,11 +496,30 @@ function getWebviewContent(skinUri, bundleUri) {
             padding: 4px 8px;
             border-radius: 4px;
         }
+
+        #debug-log {
+            position: absolute;
+            bottom: 45px;
+            left: 16px;
+            z-index: 100;
+            font-size: 10px;
+            color: #ffca28;
+            background: rgba(0, 0, 0, 0.7);
+            max-height: 120px;
+            width: 300px;
+            overflow-y: auto;
+            pointer-events: none;
+            padding: 8px;
+            border-radius: 6px;
+            font-family: monospace;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
     </style>
 </head>
 <body>
     <div id="canvas-container"></div>
     <div id="info">Drag to rotate • Scroll to zoom</div>
+    <div id="debug-log">Log Console:</div>
 
     <div id="control-panel">
         <h3>Skin Viewer</h3>
@@ -545,37 +564,49 @@ function getWebviewContent(skinUri, bundleUri) {
         let viewer;
         let rotateAnim;
         const container = document.getElementById("canvas-container");
+        const logBox = document.getElementById("debug-log");
+
+        function log(msg) {
+            logBox.innerHTML += "<div>[" + new Date().toLocaleTimeString() + "] " + msg + "</div>";
+            logBox.scrollTop = logBox.scrollHeight;
+        }
         
         function initViewer(skinUrl) {
-            viewer = new skinview3d.SkinViewer({
-                canvas: document.createElement("canvas"),
-                width: window.innerWidth,
-                height: window.innerHeight,
-                skin: skinUrl
-            });
-            container.appendChild(viewer.canvas);
-            
-            // Adjust camera & zoom
-            viewer.camera.position.z = 70;
-            viewer.zoom = 0.9;
-            
-            // Add animations
-            setAnimation("walk");
-            rotateAnim = viewer.animations.add(skinview3d.RotatingAnimation);
-            rotateAnim.speed = 0.5;
+            log("initViewer started");
+            try {
+                viewer = new skinview3d.SkinViewer({
+                    canvas: document.createElement("canvas"),
+                    width: window.innerWidth,
+                    height: window.innerHeight,
+                    skin: skinUrl
+                });
+                container.appendChild(viewer.canvas);
+                
+                // Adjust camera & zoom
+                viewer.camera.position.z = 70;
+                viewer.zoom = 0.9;
+                
+                // Add animations
+                setAnimation("walk");
+                rotateAnim = viewer.animations.add(skinview3d.RotatingAnimation);
+                rotateAnim.speed = 0.5;
 
-            // Pause auto-rotation on mouse interact
-            container.addEventListener('mousedown', () => {
-                if (rotateAnim) rotateAnim.paused = true;
-                document.getElementById("auto-rotate").checked = false;
-            });
-            container.addEventListener('touchstart', () => {
-                if (rotateAnim) rotateAnim.paused = true;
-                document.getElementById("auto-rotate").checked = false;
-            });
+                // Pause auto-rotation on mouse interact
+                container.addEventListener('mousedown', () => {
+                    if (rotateAnim) rotateAnim.paused = true;
+                    document.getElementById("auto-rotate").checked = false;
+                });
+                container.addEventListener('touchstart', () => {
+                    if (rotateAnim) rotateAnim.paused = true;
+                    document.getElementById("auto-rotate").checked = false;
+                });
 
-            // Set initial overlay visibility
-            updateLayerVisibility();
+                // Set initial overlay visibility
+                updateLayerVisibility();
+                log("initViewer completed successfully");
+            } catch (err) {
+                log("initViewer error: " + err.message);
+            }
         }
 
         initViewer("${skinUri}");
@@ -648,13 +679,22 @@ function getWebviewContent(skinUri, bundleUri) {
 
         // Listen for updates from extension
         window.addEventListener('message', event => {
-            const message = event.data;
-            if (message.command === 'updateSkin') {
-                if (viewer) {
-                    viewer.loadSkin(message.url);
-                } else {
-                    initViewer(message.url);
+            log("Message received!");
+            try {
+                const message = event.data;
+                log("Command: " + message.command);
+                if (message.command === 'updateSkin') {
+                    if (viewer) {
+                        log("Loading new skin texture...");
+                        viewer.loadSkin(message.url);
+                        log("loadSkin called");
+                    } else {
+                        log("Viewer not ready. Initializing...");
+                        initViewer(message.url);
+                    }
                 }
+            } catch (err) {
+                log("Message handle error: " + err.message);
             }
         });
     </script>
